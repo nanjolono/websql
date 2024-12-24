@@ -6,10 +6,10 @@ import (
 	"log"
 	"net/http"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql" // MySQL driver
 	"github.com/gorilla/mux"
-	_ "github.com/lib/pq"   // PostgreSQL driver
-	_ "gopkg.in/goracle.v2" // Oracle driver
+	_ "github.com/lib/pq"          // PostgreSQL driver
+	_ "github.com/sijms/go-ora/v2" // Oracle driver
 	"html/template"
 )
 
