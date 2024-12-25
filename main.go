@@ -65,13 +65,12 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		http.Redirect(w, r, "/query", http.StatusSeeOther)
+		http.Redirect(w, r, "/sqltool/query", http.StatusSeeOther)
 		return
 	}
 
 	tmpl.ExecuteTemplate(w, "index.html", nil)
 }
-
 func queryHandler(w http.ResponseWriter, r *http.Request) {
 	qr := QueryResult{}
 
@@ -85,30 +84,54 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		defer rows.Close()
 
-		columns, _ := rows.Columns()
+		columns, err := rows.Columns()
+		if err != nil {
+			qr.Error = "获取列名失败: " + err.Error()
+			tmpl.ExecuteTemplate(w, "query.html", qr)
+			return
+		}
 		qr.Columns = columns
 
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
 
 		qr.Data = []map[string]interface{}{}
+
 		for rows.Next() {
-			for i := range columns {
+			rowData := make(map[string]interface{})
+			for i := range values {
 				valuePtrs[i] = &values[i]
 			}
-			rows.Scan(valuePtrs...)
-			entry := make(map[string]interface{})
-			for i, col := range columns {
-				var val interface{}
-				switch v := values[i].(type) {
-				case []byte:
-					val = string(v)
-				default:
-					val = v
-				}
-				entry[col] = val
+
+			if err := rows.Scan(valuePtrs...); err != nil {
+				qr.Error = "扫描行数据失败: " + err.Error()
+				tmpl.ExecuteTemplate(w, "query.html", qr)
+				return
 			}
-			qr.Data = append(qr.Data, entry)
+
+			for i, col := range columns {
+				val := values[i]
+
+				b, ok := val.([]byte)
+				var strVal interface{}
+				if !ok {
+					strVal = val
+				} else if len(b) == 0 {
+					strVal = "NULL"
+				} else {
+					strVal = string(b)
+				}
+
+				rowData[col] = strVal
+			}
+
+			qr.Data = append(qr.Data, rowData)
+		}
+
+		if err := rows.Err(); err != nil {
+			qr.Error = "遍历行数据失败: " + err.Error()
+			tmpl.ExecuteTemplate(w, "query.html", qr)
+			return
 		}
 
 		if len(qr.Data) == 0 {
@@ -117,18 +140,33 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 			qr.Message = "查询成功."
 		}
 
-		tmpl.ExecuteTemplate(w, "query.html", qr)
+		// Debugging: Print the final QueryResult structure to verify it's correct
+		log.Printf("Final Query Result:\nColumns: %v\nData: %v\n", qr.Columns, qr.Data)
+
+		// Ensure template executes correctly
+		err = tmpl.ExecuteTemplate(w, "query.html", qr)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 
-	tmpl.ExecuteTemplate(w, "query.html", qr)
+	// Ensure template executes correctly for GET requests as well
+	err := tmpl.ExecuteTemplate(w, "query.html", qr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
-
 func main() {
 	r := mux.NewRouter()
-	r.HandleFunc("/", indexHandler).Methods("GET", "POST")
-	r.HandleFunc("/query", queryHandler).Methods("GET", "POST")
+	r.HandleFunc("/sqltool", indexHandler).Methods("GET", "POST")
+	r.HandleFunc("/sqltool/query", queryHandler).Methods("GET", "POST")
 
-	log.Println("Server started at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	// 添加静态文件服务
+	fs := http.FileServer(http.Dir("./static"))
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
+
+	log.Println("Server started at http://localhost:7699")
+	log.Fatal(http.ListenAndServe(":7699", r))
 }
