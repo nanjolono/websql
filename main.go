@@ -45,11 +45,12 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 		password := r.FormValue("password")
 		dbName := r.FormValue("dbname")
 		driver := r.FormValue("driver")
+		port := r.FormValue("port")
 
 		var dsn string
 		switch driver {
 		case "mysql":
-			dsn = fmt.Sprintf("%s:%s@tcp(%s:3306)/%s", user, password, ip, dbName)
+			dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, password, ip, port, dbName)
 		case "postgres":
 			dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", ip, user, password, dbName)
 		case "oracle":
